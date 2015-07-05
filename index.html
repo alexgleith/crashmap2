@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="">
+    <meta name="author" content="Alex Leith">
+
+    <title>Crash Hotspots</title>
+
+    <!-- Bootstrap Core CSS -->
+    <link href="css/bootstrap.min.css" rel="stylesheet">
+
+    <!-- Custom CSS -->
+    <link href="css/blog-post.css" rel="stylesheet">
+
+    <link href="css/bootstrap-slider.min.css" rel="stylesheet">
+
+    <!-- HTML5 Shim and Respond.js IE8 support of HTML5 elements and media queries -->
+    <!-- WARNING: Respond.js doesn't work if you view the page via file:// -->
+    <!--[if lt IE 9]>
+        <script src="js/html5shiv.js"></script>
+        <script src="js/rrespond.min.js"></script>
+    <![endif]-->
+
+</head>
+
+<body>
+    <!-- Navigation -->
+    <nav class="navbar navbar-inverse navbar-fixed-top" role="navigation">
+        <div class="container">
+            <!-- Brand and toggle get grouped for better mobile display -->
+            <div class="navbar-header">
+                <a class="navbar-brand" href="#">Crash Hotspots</a>
+            </div>
+        </div>
+        <!-- /.container -->
+    </nav>
+
+    <!-- Page Content -->
+    <div class="container">
+        <div class="row">
+            <div class="col-md-6">
+            	<div class="row">
+            		<p>This map has focuses crashes on the nearest 'node' in the road network. It's an attempt to identify areas that have more crashes than others, and allows the exploration of the crash data by providing Google Streetview at specific sites.</p>
+            	</div>
+				<div class="row">
+					<div id="Table">
+						<br>
+						<table class="table table-striped table-bordered table-condensed">
+						  <thead>
+						    <tr>
+						      <th data-sortable="true">Crash</th>
+						      <th data-sortable="true">Date and time</th>						      
+						      <th data-sortable="true">Description</th>	
+						      <th data-sortable="true">Severity</th>
+						      <th>Location</th>
+						    </tr>
+						  </thead>
+						  <tbody id="loadHere">
+						  </tbody>
+						</table>
+					</div>
+				</div>
+				<div class="row">
+					<div id="sv">
+						<div id="sv-map" style="height: 300px; width: 100%"></div>
+					</div>
+				</div>
+			</div>
+            <!-- Blog Sidebar Widgets Column -->
+            <div class="col-lg-6">
+        		<div id="map"></div>
+            </div>
+        </div>
+        <!-- /.row -->
+
+        <hr>
+
+        <!-- Footer -->
+       <footer>
+            <div class="row">
+                <div class="col-lg-12">
+                    <p>Produced by <a href="http://agl.pw">Alex Leith</a></p>
+                </div>
+            </div>
+            <!-- /.row -->
+        </footer>
+    </div>
+    <!-- /.container -->
+
+    <!-- jQuery -->
+    <script src="js/jquery-1.11.2.min.js"></script>
+
+	<!-- Leaflet -->
+	<link rel="stylesheet" href="css/leaflet.css" />
+	<script src="js/leaflet.js"></script>
+
+	<!-- Marker Clusters -->
+	<link rel="stylesheet" href="css/MarkerCluster.css" />
+	<link rel="stylesheet" href="css/MarkerCluster.Default.css" />
+	<script src="js/leaflet.markercluster.js"></script>
+
+	<!-- Latest compiled and minified CSS -->
+	<link rel="stylesheet" href="css/bootstrap.min.css">
+
+	<!-- Latest compiled and minified JavaScript -->
+	<script src="js/bootstrap.min.js"></script>
+	<script type='text/javascript' src="js/bootstrap-slider.min.js"></script>
+	<script src="https://maps.googleapis.com/maps/api/js"></script>
+
+    <script>
+	    var map = new L.Map('map', { center: new L.LatLng(-41.69752, 146.25549), zoom: 7, attributionControl:true, zoomControl:true, minZoom:6}); 
+	    var pano = null;
+	     function initialize() {
+
+	         var panoramaOptions = {
+			    position: new google.maps.LatLng(-42.883401, 147.32726),
+			    pov: {
+			      heading: 34,
+			      pitch: 10
+			    }
+			  };
+			  pano = new google.maps.StreetViewPanorama(document.getElementById('sv-map'), panoramaOptions);
+			  //map.setStreetView(panorama);
+	      }
+	      google.maps.event.addDomListener(window, 'load', initialize);
+
+	    var LISTTopographic = new L.tileLayer("https://services.thelist.tas.gov.au/arcgis/rest/services/Basemaps/Topographic/ImageServer/tile/{z}/{y}/{x}", {
+	      attribution: "Basemap &copy The LIST",
+	      maxZoom: 20,
+	      maxNativeZoom: 18
+	    });
+
+	    var LISTAerial = new L.tileLayer("https://services.thelist.tas.gov.au/arcgis/rest/services/Basemaps/Orthophoto/ImageServer/tile/{z}/{y}/{x}", {
+		    attribution: "Base Imagery from <a href=http://www.thelist.tas.gov.au>the LIST</a> &copy State of Tasmania",
+		    maxZoom: 20,
+		    maxNativeZoom: 19
+		});
+
+    	map.addLayer(LISTTopographic)
+
+		var baseMaps = {
+		    "Aerial Imagery": LISTAerial,
+		    "Topo Basemap": LISTTopographic
+		};
+
+		var overlayMaps = {};
+
+		L.control.layers(baseMaps, overlayMaps).addTo(map);
+
+		function onEachFeature(data) {
+			//console.log(data)
+		}
+		var markers = new L.MarkerClusterGroup({ disableClusteringAtZoom: 11 });
+		
+		var geojsonMarkerOptions = {
+		    radius: 8,
+		    fillColor: "#ff7800",
+		    color: "#aaa",
+		    weight: 1,
+		    opacity: 1,
+		    fillOpacity: 0.8
+		};
+		var crashPoint = null;
+
+		$(document).on("click", ".location-item", function(e) {
+		  	var locstring = $(this).attr("id").split(',');
+
+		  	var streetViewService = new google.maps.StreetViewService();
+			var STREETVIEW_MAX_DISTANCE = 100;
+			var loc = new google.maps.LatLng(locstring[1],locstring[0]);
+			streetViewService.getPanoramaByLocation(loc, STREETVIEW_MAX_DISTANCE, function (streetViewPanoramaData, status) {
+			    if (status === google.maps.StreetViewStatus.OK) {
+		  			pano.setPosition(loc);
+	  				$("#sv-map").removeClass('hidden');
+			    } else {
+			        // no street view available in this range, or some error occurred
+	  				$("#sv-map").addClass('hidden');
+			    }
+			});
+
+
+		  	if (crashPoint !== null) {
+		  		map.removeLayer(crashPoint)
+		  	}
+	  		crashPoint = L.marker([locstring[1],locstring[0]]).addTo(map);
+	  		map.setView(crashPoint.getLatLng(),15)
+		});
+
+		function getClass(severity) {
+			if(severity === 'Fatal') {
+				return "danger";
+			} else if (severity === 'Serious') {
+				return "warning";
+			} else {
+				return "";
+			}
+		}
+		function onMarkerClick(item) {			
+	  		$("#sv-map").addClass('hidden');
+	  		if (crashPoint !== null) {
+		  		map.removeLayer(crashPoint)
+		  	}
+			crashes = item.target.feature.properties.crashes
+			$('#loadHere').empty();
+			for (i = 0; i < crashes.length; i += 1) {
+			    $('#loadHere').append(
+			      '<tr>' +
+			        '<td>' + crashes[i].unit_type+ '</td>' +
+			        '<td>' + crashes[i].crash_date + ' at ' + crashes[i].crash_time + '</td>' +
+			        '<td>' + crashes[i].dca + '</td>' +
+			        '<td class="'+getClass(crashes[i].severity)+'">' + crashes[i].severity + '</td>' +			        
+			        '<td>' + '<a href="#" class="location-item" id="'+crashes[i].location.coordinates+'">Specific location</a>' + '</td>' +
+			    '</table>');
+			}
+		}
+
+		locations = null;
+		locationsMap = null;
+		function getLocations(json) {
+			locations = json;
+			locationsMap = L.geoJson(locations, {
+			    pointToLayer: function (feature, latlng) {
+			    	theseOptions = geojsonMarkerOptions
+			    	theseOptions.fillColor = getColour(feature.properties.ncrashes)
+					marker = L.circleMarker(latlng, theseOptions).on('click', onMarkerClick);
+			        return marker
+			    }
+			});
+			markers.addLayer(locationsMap,{}).addTo(map);
+		}
+
+		function getColour(value) {
+			if(value > 3) {
+				return 'red'
+			} else if (value > 1){
+				return 'orange'
+			} else {
+				return 'white'
+			}
+		}
+
+    </script>
+
+	<!-- load the data -->
+	<script type="text/javascript" src="data.geojson"></script>
+
+
+</body>
+
+</html>
